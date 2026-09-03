@@ -7,21 +7,65 @@
   "appPath": "expense-api",
   "entrypoint": "deployment/service",
   "exposure": "intranet",
+  "stories": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "description": "Owns expense claims, users (employee/manager relationships), and expense categories. Exposes CRUD for claims, approve/reject actions, manager assignment, category management, and a CSV export of approved-but-unexported claims for a given period. Does not integrate with any payroll system directly and sends no notifications.",
   "dependencies": [
     {
       "kind": "platform-resource",
       "name": "expense-db",
       "resourceType": "postgres-cnpg",
-      "parameters": { "instances": 1, "storage": "1Gi", "version": "16" }
+      "parameters": {
+        "instances": 1,
+        "storage": "1Gi",
+        "version": "16"
+      },
+      "wiring": {
+        "ref": "todo-web451-expense-db",
+        "envBindings": {
+          "dbname": "EXPENSE_DB_DBNAME",
+          "host": "EXPENSE_DB_HOST",
+          "password": "EXPENSE_DB_PASSWORD",
+          "port": "EXPENSE_DB_PORT",
+          "user": "EXPENSE_DB_USER"
+        }
+      }
     },
     {
       "kind": "platform-resource",
       "name": "thunder",
+      "description": "Validates the caller's Thunder-issued token and resolves their role for authorization.",
       "resourceType": "thunder-app",
-      "description": "Validates the caller's Thunder-issued token and resolves their role for authorization."
+      "wiring": {
+        "ref": "todo-web451-thunder",
+        "envBindings": {
+          "client_id": "THUNDER_CLIENT_ID",
+          "issuer": "THUNDER_ISSUER",
+          "jwks_url": "THUNDER_JWKS_URL",
+          "scopes": "THUNDER_SCOPES"
+        }
+      }
     }
   ],
-  "description": "Owns expense claims, users (employee/manager relationships), and expense categories. Exposes CRUD for claims, approve/reject actions, manager assignment, category management, and a CSV export of approved-but-unexported claims for a given period. Does not integrate with any payroll system directly and sends no notifications.",
-  "stories": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-  "skillsPinned": ["openapi-conventions", "ballerina", "api-management", "thunder-authentication"]
+  "exposesAPI": {
+    "auth": "end-user-required"
+  },
+  "skillsPinned": [
+    "openapi-conventions",
+    "ballerina",
+    "api-management",
+    "thunder-authentication"
+  ]
 }

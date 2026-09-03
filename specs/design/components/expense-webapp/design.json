@@ -7,16 +7,56 @@
   "appPath": "expense-webapp",
   "entrypoint": "deployment/web-application",
   "exposure": "internet",
+  "stories": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "description": "The single web app used by all four roles: employees submit and track claims, managers review and decide on them, finance browses and exports approved claims, and admins manage manager assignments and the category list. All data reads and writes go through expense-api; the app holds no data of its own.",
   "dependencies": [
-    { "kind": "component", "name": "expense-api" },
+    {
+      "kind": "component",
+      "name": "expense-api",
+      "wiring": {
+        "endpoint": {
+          "component": "todo-web451-expense-api",
+          "name": "http",
+          "visibility": "project",
+          "envBindings": {
+            "address": "EXPENSE_API_URL"
+          }
+        }
+      }
+    },
     {
       "kind": "platform-resource",
       "name": "thunder",
+      "description": "Signs employees, managers, finance users, and admins in via Thunder SSO.",
       "resourceType": "thunder-app",
-      "description": "Signs employees, managers, finance users, and admins in via Thunder SSO."
+      "wiring": {
+        "ref": "todo-web451-thunder",
+        "envBindings": {
+          "client_id": "THUNDER_CLIENT_ID",
+          "issuer": "THUNDER_ISSUER",
+          "jwks_url": "THUNDER_JWKS_URL",
+          "scopes": "THUNDER_SCOPES"
+        }
+      }
     }
   ],
-  "description": "The single web app used by all four roles: employees submit and track claims, managers review and decide on them, finance browses and exports approved claims, and admins manage manager assignments and the category list. All data reads and writes go through expense-api; the app holds no data of its own.",
-  "stories": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-  "skillsPinned": ["wireframes", "react-webapp", "astryx-design-system", "thunder-authentication"]
+  "skillsPinned": [
+    "wireframes",
+    "react-webapp",
+    "astryx-design-system",
+    "thunder-authentication"
+  ]
 }
