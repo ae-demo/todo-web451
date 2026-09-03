@@ -1,0 +1,27 @@
+{
+  "name": "expense-api",
+  "type": "service",
+  "version": "0.1.0",
+  "language": "Ballerina",
+  "buildpack": "docker",
+  "appPath": "expense-api",
+  "entrypoint": "deployment/service",
+  "exposure": "intranet",
+  "dependencies": [
+    {
+      "kind": "platform-resource",
+      "name": "expense-db",
+      "resourceType": "postgres-cnpg",
+      "parameters": { "instances": 1, "storage": "1Gi", "version": "16" }
+    },
+    {
+      "kind": "platform-resource",
+      "name": "thunder",
+      "resourceType": "thunder-app",
+      "description": "Validates the caller's Thunder-issued token and resolves their role for authorization."
+    }
+  ],
+  "description": "Owns expense claims, users (employee/manager relationships), and expense categories. Exposes CRUD for claims, approve/reject actions, manager assignment, category management, and a CSV export of approved-but-unexported claims for a given period. Does not integrate with any payroll system directly and sends no notifications.",
+  "stories": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  "skillsPinned": ["openapi-conventions", "ballerina", "api-management", "thunder-authentication"]
+}

@@ -1,0 +1,420 @@
+openapi: 3.0.3
+info:
+  title: Expense Claims API
+  version: 0.1.0
+  description: Manages expense claims, users, manager assignments, categories, and payroll export.
+servers:
+  - url: /
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UserId:
+      name: X-User-Id
+      in: header
+      required: true
+      description: caller identity injected by the gateway from the validated token
+      schema: { type: string }
+    ClaimId:
+      name: claimId
+      in: path
+      required: true
+      schema: { type: string }
+    UserPathId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: integer, description: HTTP or application error code }
+        message: { type: string, description: short human-readable label }
+        description: { type: string, description: detailed explanation }
+        moreInfo: { type: string, description: URI to documentation }
+    ExpenseClaim:
+      type: object
+      required: [id, employeeId, categoryId, amount, claimDate, description, receiptUrl, status]
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        categoryId: { type: string }
+        amount: { type: number, format: double }
+        claimDate: { type: string, format: date }
+        description: { type: string }
+        receiptUrl: { type: string }
+        status: { type: string, enum: [submitted, approved, rejected] }
+        managerComment: { type: string, nullable: true }
+        exportedAt: { type: string, format: date-time, nullable: true }
+    NewExpenseClaim:
+      type: object
+      required: [categoryId, amount, claimDate, description, receiptUrl]
+      properties:
+        categoryId: { type: string }
+        amount: { type: number, format: double }
+        claimDate: { type: string, format: date }
+        description: { type: string }
+        receiptUrl: { type: string }
+    ClaimDecision:
+      type: object
+      required: [comment]
+      properties:
+        comment: { type: string }
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [Employee, Manager, Finance, Admin] }
+        managerId: { type: string, nullable: true }
+    ManagerAssignment:
+      type: object
+      required: [managerId]
+      properties:
+        managerId: { type: string }
+    ExpenseCategory:
+      type: object
+      required: [id, name, active]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+    NewExpenseCategory:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+security:
+  - bearerAuth: []
+paths:
+  /expense-claims:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      operationId: listExpenseClaims
+      summary: List expense claims, filterable by employee, manager's team, or status
+      parameters:
+        - name: employeeId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [submitted, approved, rejected] }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Matching claims
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExpenseClaim' }
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    post:
+      operationId: submitExpenseClaim
+      summary: Submit a new expense claim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewExpenseClaim' }
+      responses:
+        '201':
+          description: Claim created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Invalid claim data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /expense-claims/{claimId}:
+    parameters:
+      - $ref: '#/components/parameters/ClaimId'
+      - $ref: '#/components/parameters/UserId'
+    get:
+      operationId: getExpenseClaim
+      summary: Get one expense claim
+      responses:
+        '200':
+          description: The claim
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    put:
+      operationId: updateExpenseClaim
+      summary: Edit a rejected claim and resubmit it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewExpenseClaim' }
+      responses:
+        '200':
+          description: Claim updated and resubmitted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Invalid claim data, or claim not in rejected status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /expense-claims/{claimId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/ClaimId'
+      - $ref: '#/components/parameters/UserId'
+    post:
+      operationId: approveExpenseClaim
+      summary: Approve a submitted claim
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimDecision' }
+      responses:
+        '200':
+          description: Claim approved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Claim not in submitted status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Caller is not the claim's manager
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /expense-claims/{claimId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/ClaimId'
+      - $ref: '#/components/parameters/UserId'
+    post:
+      operationId: rejectExpenseClaim
+      summary: Reject a submitted claim with a comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimDecision' }
+      responses:
+        '200':
+          description: Claim rejected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseClaim' }
+        '400':
+          description: Claim not in submitted status, or missing comment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Caller is not the claim's manager
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Claim not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /expense-claims/export:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      operationId: exportExpenseClaims
+      summary: Export approved, not-yet-exported claims for a period as CSV and mark them exported
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: CSV file of approved claims in the period
+          content:
+            text/csv:
+              schema: { type: string }
+        '400':
+          description: Invalid date range
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /users:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      operationId: listUsers
+      summary: List users, for assigning managers
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+  /users/{userId}/manager:
+    parameters:
+      - $ref: '#/components/parameters/UserPathId'
+      - $ref: '#/components/parameters/UserId'
+    put:
+      operationId: assignManager
+      summary: Assign or change an employee's manager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ManagerAssignment' }
+      responses:
+        '200':
+          description: Manager assigned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400':
+          description: Invalid manager assignment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /expense-categories:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      operationId: listExpenseCategories
+      summary: List expense categories
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching items }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExpenseCategory' }
+    post:
+      operationId: createExpenseCategory
+      summary: Add a new expense category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewExpenseCategory' }
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseCategory' }
+        '400':
+          description: Invalid category data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /expense-categories/{categoryId}:
+    parameters:
+      - $ref: '#/components/parameters/CategoryId'
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      operationId: updateExpenseCategory
+      summary: Rename or activate/deactivate a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                active: { type: boolean }
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpenseCategory' }
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
