@@ -1,0 +1,29 @@
+apiVersion: openchoreo.dev/v1alpha1
+metadata:
+  name: expense-api
+
+endpoints:
+  - name: http
+    type: HTTP
+    port: 9090
+    basePath: /
+    visibility:
+      - project
+      - internal
+      - external
+
+dependencies:
+  resources:
+    - ref: todo-web451-expense-db
+      envBindings:
+        dbname: EXPENSE_DB_DBNAME
+        host: EXPENSE_DB_HOST
+        password: EXPENSE_DB_PASSWORD
+        port: EXPENSE_DB_PORT
+        user: EXPENSE_DB_USER
+    - ref: todo-web451-thunder
+      envBindings:
+        client_id: THUNDER_CLIENT_ID
+        issuer: THUNDER_ISSUER
+        jwks_url: THUNDER_JWKS_URL
+        scopes: THUNDER_SCOPES

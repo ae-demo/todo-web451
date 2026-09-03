@@ -1,0 +1,27 @@
+apiVersion: openchoreo.dev/v1alpha1
+metadata:
+  name: expense-webapp
+
+endpoints:
+  - name: http
+    type: HTTP
+    port: 9090
+    basePath: /
+    visibility:
+      - project
+      - external
+
+dependencies:
+  endpoints:
+    - component: todo-web451-expense-api
+      name: http
+      visibility: project
+      envBindings:
+        address: EXPENSE_API_URL
+  resources:
+    - ref: todo-web451-thunder
+      envBindings:
+        client_id: THUNDER_CLIENT_ID
+        issuer: THUNDER_ISSUER
+        jwks_url: THUNDER_JWKS_URL
+        scopes: THUNDER_SCOPES
