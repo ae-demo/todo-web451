@@ -22,14 +22,33 @@ browser config — they are pod env for nginx.
    it), then generate `src/generated/` from each dependency's OpenAPI contract,
    then `src/api.ts` with **same-origin** `baseUrl`, then pages. Every rule under
    Constraints is a runtime failure if broken, not a style preference.
-3. **Verify** — from the app path:
+3. **Mock mode** — author `mock/` per `references/mock-mode.md`. It stands the
+   same app up with no cluster, no sibling service and no IDP behind it, and the
+   build eliminates it as dead code.
+4. **Verify** — from the app path:
    ```bash
    npm install                   # regenerates package-lock.json
    # ← the design system's check goes here (see below)
    npx tsc --noEmit              # type-check without emitting
    npm run build                 # actually build
+   ! grep -rqE "mock/|msw" dist/ # the bundle carries no mock — step 3
+   git status --porcelain --ignored=matching -- . \
+     | grep '^!!' | grep -vE 'node_modules|dist'   # ← output MUST be empty
    ```
    Commit the `package-lock.json` this produces. Never commit `node_modules/`.
+
+   **The last line is not a formality.** Every step above it reads your working
+   tree; the cluster builds the *committed* tree of this folder alone. A build
+   input that git ignores is present for all four checks and absent from the
+   image, and git will not tell you: `git add <app-path>` skips an ignored file
+   **silently, exit 0**, and leaves `git status` clean. `src/generated/` is the
+   one that bites, because the repo-root `.gitignore` is shared with backend
+   components that legitimately ignore a `generated/` directory — an unanchored
+   pattern there reaches down into this app. `--ignored=matching` is what makes
+   those paths visible; `node_modules` and `dist` are the only two the builder
+   stage makes for itself, which is why they are the only two filtered out.
+   A `!!` line naming anything else means the image will not carry that file.
+   Fix the pattern (anchor it in the repo-root `.gitignore`), never `git add -f`.
 
    **The design-system skill contributes one step to this sequence**, and it is
    mandatory: run the command its own Verify section names, after `npm install`
@@ -38,7 +57,7 @@ browser config — they are pod env for nginx.
    build plugin, an unimported theme, a peer-dependency mismatch — is the one
    class of fault `tsc` and `vite build` cannot see: it type-checks and builds
    perfectly clean, then renders an unstyled page in the cluster. If the pinned
-   design-system skill names no such command, the sequence is just the three
+   design-system skill names no such command, the sequence is just the five
    above.
 
    The `build` script is `tsc --noEmit && vite build` — **not** `tsc -b`, which
@@ -50,7 +69,10 @@ browser config — they are pod env for nginx.
    the advisories land on Vite's dev-only transitive dependencies, which never
    reach a static bundle served by nginx, and `audit fix` bumps pinned
    dependencies behind your back.
-4. **PR** — only once step 3 exits 0.
+5. **Walk** — `mock-verification`, another agent's dispatch. Your job ends at
+   a clean Verify with `mock/` in place.
+6. **PR** — the lead's, once the walk has reported; an open `[ ]` line rides in
+   its body (the component contract's **Walks**).
 
 ## Constraints
 
@@ -151,10 +173,12 @@ per-component Docker build's context is this app's own folder alone.
 │   ├── api.ts            # openapi-fetch client(s), typed against generated/
 │   ├── auth.ts           # only with an auth dependency — see thunder-authentication
 │   └── pages/            # design-system components only, never raw HTML
+├── mock/                 # mock mode — references/mock-mode.md
 ├── nginx/
 │   ├── default.conf      # copied from the skill assets, then /api locations kept
 │   └── 15-aep-api-proxy.sh
-└── Dockerfile
+├── Dockerfile
+└── .dockerignore         # what `COPY . .` leaves behind
 ```
 
 **Copy the nginx assets first.** From the App Path:
@@ -271,8 +295,20 @@ EXPOSE 9090
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
+`.dockerignore` — beside it, so `COPY . .` uploads this app's sources rather than
+a local `node_modules` and a stale `dist`, both of which the builder stage makes
+for itself:
+
+```text
+node_modules
+dist
+```
+
+`mock/` stays in the context: `vite.config.ts` imports `mock/plugin`, so the
+production build needs the directory on disk even though it ships none of it.
+
 **Done when:** Dockerfile COPYs the drop-in to `/docker-entrypoint.d/` and has
-no `ENTRYPOINT` line.
+no `ENTRYPOINT` line, and `.dockerignore` sits beside it.
 
 `workload.yaml` follows your prompt — as given when it carries one, else per the
 component contract. Consumer connection to the sibling: `visibility: project`,
@@ -300,3 +336,4 @@ place rather than stripping `external` because this SPA uses `/api`
 | `/api` 503 through the gateway | The gateway authenticated but cannot reach the service | The provider endpoint needs `internal` in its `workload.yaml` visibility (`workload-and-wiring`). |
 | Types in `src/generated/*` don't match the live service | Upstream `openapi.yaml` changed since last generation | Re-run the `openapi-typescript` command and commit the diff. |
 | Docker build succeeds but ships stale/hand-written shapes, or fails `ENOENT ../specs/...` | `src/generated/` wasn't committed — the per-component build context is this app's folder alone | Generate and commit `src/generated/` before PR. |
+| Build red on `TS2307: Cannot find module './generated/…'` (plus a burst of `TS7006` implicit-`any`) while `tsc --noEmit` is clean locally | `src/generated/` is **git-ignored**, usually by an unanchored `generated/` in the repo-root `.gitignore` written for a backend component. `git add` skipped it at exit 0 and `git status` stayed clean | `git check-ignore -v src/generated/*` names the offending line. Anchor that pattern (`/onboarding-api/generated/`), then re-add. The `TS7006` rows are downstream of the missing types and vanish with them. Never `git add -f`. |
